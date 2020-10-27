@@ -87,6 +87,12 @@ Metadata:
         - EnableECRPlugin
         - EnableDockerLoginPlugin
 
+      - Label:
+          default: IAM SSH Agent Configuration
+        Parameters:
+          - SshAgentBackend
+          - SshAgentBackendUrl
+
 Parameters:
   KeyName:
     Description: Optional - SSH keypair used to access the buildkite instances, setting this will enable SSH ingress
@@ -381,6 +387,18 @@ Parameters:
       - "false"
     Default: "false"
 
+  SshAgentBackend:
+    Type: String
+    Description: Optional - API Gateway Stage ARN for an IAM SSH Agent backend.
+    Default: ""
+    AllowedPattern: "^$|^(arn:aws:execute-api:[a-z0-9\\-]+:\\d{12}:[a-z0-9]+/[a-zA-Z0-9]+)$"
+
+  SshAgentBackendUrl:
+    Type: String
+    Description: Optional - API Gateway Stage URL for an IAM SSH Agent backend, allows you to override the default URL for the API Gateway with a VPC Endpoint URL.
+    Default: ""
+    AllowedPattern: "^$|^(https://[a-zA-Z0-9\\-]+|[a-zA-Z0-9\\-]+(\\.[a-zA-Z0-9\\-]+)+/[a-zA-Z0-9]+)$"
+
 Outputs:
   VpcId:
     Value:
@@ -484,6 +502,11 @@ Conditions:
 
     UseLinuxAgents:
       !Equals [ !Ref InstanceOperatingSystem, "linux" ]
+
+    UseSshAgentBackend:
+      !Not [ !Equals [ !Ref SshAgentBackend, "" ] ]
+    HasSshAgentBackendUrl:
+      !Not [ !Equals [ !Ref SshAgentBackendUrl, "" ] ]
 
 Mappings:
   ECRManagedPolicy:
@@ -693,6 +716,12 @@ Resources:
               - sns:Unsubscribe
               - sns:Subscribe
             Resource: "*"
+          - !If
+              - UseSshAgentBackend
+              - Effect: Allow
+                Action: execute-api:Invoke
+                Resource: !Sub "${SshAgentBackend}/*/*"
+              - !Ref AWS::NoValue
       Roles:
         - !Ref IAMRole
 
@@ -904,11 +933,40 @@ Resources:
                   ECR_PLUGIN_ENABLED=${EnableECRPlugin} \
                   DOCKER_LOGIN_PLUGIN_ENABLED=${EnableDockerLoginPlugin} \
                   AWS_REGION=${AWS::Region} \
+                  IAM_SSH_AGENT_BACKEND_URL=${SshAgentBackendUrl} \
                     /usr/local/bin/bk-install-elastic-stack.sh
                   --==BOUNDARY==--
-                - {
-                    LocalSecretsBucket: !If [ CreateSecretsBucket, !Ref ManagedSecretsBucket, !Ref SecretsBucket ],
-                  }
+                - LocalSecretsBucket: !If [ CreateSecretsBucket, !Ref ManagedSecretsBucket, !Ref SecretsBucket ]
+                  SshAgentBackendUrl:
+                    !If
+                      - UseSshAgentBackend
+                      - !If
+                        - HasSshAgentBackendUrl
+                        - !Ref SshAgentBackendUrl
+                        - "Fn::Sub": [
+                            "https://${ApiId}.execute-api.${Region}.amazonaws.com/${Stage}",
+                            {
+                              ApiId: {
+                                "Fn::Select": [
+                                  5,
+                                  { "Fn::Split": [ ":", { "Fn::Select": [ 0, { "Fn::Split": [ "/", !Ref SshAgentBackend ] } ] } ] }
+                                ]
+                              },
+                              Region: {
+                                "Fn::Select": [
+                                  3,
+                                  { "Fn::Split": [ ":", { "Fn::Select": [ 0, { "Fn::Split": [ "/", !Ref SshAgentBackend ] } ] } ] }
+                                ]
+                              },
+                              Stage: {
+                                "Fn::Select": [
+                                  1,
+                                  { "Fn::Split": [ "/", !Ref SshAgentBackend ] }
+                                ]
+                              }
+                            }
+                          ]
+                      - !Ref AWS::NoValue
 
   AgentAutoScaleGroup:
     Type: AWS::AutoScaling::AutoScalingGroup

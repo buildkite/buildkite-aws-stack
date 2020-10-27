@@ -11,6 +11,7 @@ User=buildkite-agent
 Environment="HOME=/var/lib/buildkite-agent"
 Environment="PATH=/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
 Environment="USER=buildkite-agent"
+Environment="SSH_AUTH_SOCK=%t/ssh-agent/socket"
 ExecStart=/usr/bin/buildkite-agent start
 ExecStopPost=/usr/local/bin/terminate-instance
 RestartSec=5

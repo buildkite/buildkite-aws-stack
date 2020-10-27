@@ -47,6 +47,10 @@
     },
     {
       "type": "shell",
+      "script": "scripts/install-iam-ssh-agent.sh"
+    },
+    {
+      "type": "shell",
       "script": "scripts/install-docker.sh"
     },
     {

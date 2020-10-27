@@ -155,6 +155,18 @@ EOF
 systemctl enable lifecycled.service
 systemctl start lifecycled
 
+if [ -n "${IAM_SSH_AGENT_BACKEND_URL}" ]
+then
+	# Enable ssh-agent for all users
+	cat << EOF > /etc/iam-ssh-agent
+IAM_SSH_AGENT_BACKEND_URL=${IAM_SSH_AGENT_BACKEND_URL}
+EOF
+
+	# Add ssh-agent as a .wants for buildkite-agent
+	mkdir -p /etc/systemd/system/buildkite-agent.service.wants/
+	ln -s /etc/systemd/system/ssh-agent.service /etc/systemd/system/buildkite-agent.service.wants/ssh-agent.service
+fi
+
 # wait for docker to start
 next_wait_time=0
 until docker ps || [ $next_wait_time -eq 5 ]; do
