@@ -407,6 +407,12 @@ Parameters:
       - "false"
     Default: "false"
 
+  MaxInstanceLifetime:
+    Type: Number
+    Description: The maximum amount of time, in seconds, that an instance can be in service. The default is null. If specified, the value must be either 0 or a number equal to or greater than 86,400 seconds (1 day).
+    Default: 0
+    MinValue: 0
+
 Outputs:
   VpcId:
     Value:
@@ -536,6 +542,9 @@ Conditions:
         - !Equals [ !Select [ 0, !Split [ ".", !Ref InstanceType ] ], "c6gn" ]
         - !Equals [ !Select [ 0, !Split [ ".", !Ref InstanceType ] ], "r6g" ]
         - !Equals [ !Select [ 0, !Split [ ".", !Ref InstanceType ] ], "r6gd" ]
+
+    UseMaxInstanceLifetime:
+      !Not [ !Equals [ !Ref MaxInstanceLifetime, 0 ] ]
 
 Mappings:
   ECRManagedPolicy:
@@ -1015,6 +1024,7 @@ Resources:
       TerminationPolicies:
         - OldestLaunchConfiguration
         - ClosestToNextInstanceHour
+      MaxInstanceLifetime: !If [UseMaxInstanceLifetime, !Ref MaxInstanceLifetime, !Ref "AWS::NoValue"]
     CreationPolicy:
       ResourceSignal:
         Timeout: !If [ UseDefaultInstanceCreationTimeout, !If [ UseWindowsAgents, PT10M, PT5M ], !Ref InstanceCreationTimeout ]
