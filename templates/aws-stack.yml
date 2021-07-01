@@ -729,10 +729,13 @@ Resources:
               - cloudwatch:PutMetricData
               - cloudformation:DescribeStackResource
               - ec2:DescribeTags
+            Resource: "*"
+          - Effect: Allow
+            Action:
               - autoscaling:DescribeAutoScalingInstances
               - autoscaling:SetInstanceHealth
               - autoscaling:TerminateInstanceInAutoScalingGroup
-            Resource: "*"
+            Resource: !Sub arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AWS::StackName}-AgentAutoScaleGroup-*
           - Effect: Allow
             Action:
               - logs:CreateLogGroup
