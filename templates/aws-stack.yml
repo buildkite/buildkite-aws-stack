@@ -2,15 +2,17 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "Buildkite stack %v"
 
+Transform: AWS::Serverless-2016-10-31
+
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
           default: Buildkite Configuration
         Parameters:
-        - BuildkiteAgentToken
         - BuildkiteAgentTokenParameterStorePath
         - BuildkiteAgentTokenParameterStoreKMSKey
+        - BuildkiteAgentToken
         - BuildkiteQueue
 
       - Label:
@@ -104,7 +106,7 @@ Parameters:
     Default: "stable"
 
   BuildkiteAgentToken:
-    Description: Buildkite agent registration token
+    Description: Buildkite agent registration token. Deprecated, use BuildkiteAgentTokenParameterStorePath instead.
     Type: String
     NoEcho: true
     Default: ""
@@ -492,11 +494,12 @@ Conditions:
     UseECR:
       !Not [ !Equals [ !Ref ECRAccessPolicy, "none" ] ]
 
-    UseSSMAgentToken:
+    UseCustomerManagedParameterPath:
       !Not [ !Equals [ !Ref BuildkiteAgentTokenParameterStorePath, "" ] ]
-
     UseCustomerManagedKeyForParameterStore:
       !Not [ !Equals [ !Ref BuildkiteAgentTokenParameterStoreKMSKey, "" ] ]
+    CreateAgentTokenParameter:
+      !Equals [ !Ref BuildkiteAgentTokenParameterStorePath, "" ]
 
     HasVariableSize:
       !Not [ !Equals [ !Ref MaxSize, !Ref MinSize ] ]
@@ -543,28 +546,6 @@ Mappings:
     readonly  : { Policy: 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly' }
     poweruser : { Policy: 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser' }
     full      : { Policy: 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess' }
-
-  LambdaBucket:
-    us-east-1 : { Bucket: "buildkite-lambdas" }
-    us-east-2 : { Bucket: "buildkite-lambdas-us-east-2" }
-    us-west-1 : { Bucket: "buildkite-lambdas-us-west-1" }
-    us-west-2 : { Bucket: "buildkite-lambdas-us-west-2" }
-    af-south-1 : { Bucket: "buildkite-lambdas-af-south-1" }
-    ap-east-1 : { Bucket: "buildkite-lambdas-ap-east-1" }
-    ap-south-1 : { Bucket: "buildkite-lambdas-ap-south-1" }
-    ap-northeast-2 : { Bucket: "buildkite-lambdas-ap-northeast-2" }
-    ap-northeast-1 : { Bucket: "buildkite-lambdas-ap-northeast-1" }
-    ap-southeast-2 : { Bucket: "buildkite-lambdas-ap-southeast-2" }
-    ap-southeast-1 : { Bucket: "buildkite-lambdas-ap-southeast-1" }
-    ca-central-1 : { Bucket: "buildkite-lambdas-ca-central-1" }
-    eu-central-1 : { Bucket: "buildkite-lambdas-eu-central-1" }
-    eu-west-1 : { Bucket: "buildkite-lambdas-eu-west-1" }
-    eu-west-2 : { Bucket: "buildkite-lambdas-eu-west-2" }
-    eu-south-1 : { Bucket: "buildkite-lambdas-eu-south-1" }
-    eu-west-3 : { Bucket: "buildkite-lambdas-eu-west-3" }
-    eu-north-1 : { Bucket: "buildkite-lambdas-eu-north-1" }
-    me-south-1 : { Bucket: "buildkite-lambdas-me-south-1" }
-    sa-east-1 : { Bucket: "buildkite-lambdas-sa-east-1" }
 
   # Generated from Makefile via build/mappings.yml
   AWSRegion2AMI: { linuxamd64: !Ref ImageId, linuxarm64: !Ref ImageId, windows: !Ref ImageId }
@@ -657,6 +638,14 @@ Resources:
       SubnetId: !Ref Subnet1
       RouteTableId: !Ref Routes
 
+  BuildkiteAgentTokenParameter:
+    Type: AWS::SSM::Parameter
+    Condition: CreateAgentTokenParameter
+    Properties:
+      Name: !Sub "/${AWS::StackName}/buildkite/agent-token"
+      Type: String
+      Value: !Ref BuildkiteAgentToken
+
   # Allow ec2 instances to assume a role and be granted the IAMPolicies
   IAMInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -699,17 +688,16 @@ Resources:
                     - kms:Decrypt
                   Resource: !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/${BuildkiteAgentTokenParameterStoreKMSKey}
           - !Ref 'AWS::NoValue'
-        - !If
-          - UseSSMAgentToken
-          - PolicyName: ReadAgentToken
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - ssm:GetParameter
-                  Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BuildkiteAgentTokenParameterStorePath}
-          - !Ref 'AWS::NoValue'
+        - PolicyName: ReadAgentToken
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource:
+                  !Sub
+                    - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParameterPath}
+                    - ParameterPath: !If [ UseCustomerManagedParameterPath, !Ref BuildkiteAgentTokenParameterStorePath, !Ref BuildkiteAgentTokenParameter ]
       AssumeRolePolicyDocument:
         Statement:
           - Effect: Allow
@@ -908,8 +896,7 @@ Resources:
                   $Env:BUILDKITE_STACK_VERSION="%v"
                   $Env:BUILDKITE_SCALE_IN_IDLE_PERIOD="${ScaleInIdlePeriod}"
                   $Env:BUILDKITE_SECRETS_BUCKET="${LocalSecretsBucket}"
-                  $Env:BUILDKITE_AGENT_TOKEN="${BuildkiteAgentToken}"
-                  $Env:BUILDKITE_AGENT_TOKEN_PATH="${BuildkiteAgentTokenParameterStorePath}"
+                  $Env:BUILDKITE_AGENT_TOKEN_PATH="${AgentTokenPath}"
                   $Env:BUILDKITE_AGENTS_PER_INSTANCE="${AgentsPerInstance}"
                   $Env:BUILDKITE_AGENT_TAGS="${BuildkiteAgentTags}"
                   $Env:BUILDKITE_AGENT_TIMESTAMP_LINES="${BuildkiteAgentTimestampLines}"
@@ -932,6 +919,7 @@ Resources:
                   </powershell>
                 - {
                     LocalSecretsBucket: !If [ CreateSecretsBucket, !Ref ManagedSecretsBucket, !Ref SecretsBucket ],
+                    AgentTokenPath: !If [ UseCustomerManagedParameterPath, !Ref BuildkiteAgentTokenParameterStorePath, !Ref BuildkiteAgentTokenParameter ],
                   }
               - !Sub
                 - |
@@ -949,8 +937,7 @@ Resources:
                   BUILDKITE_STACK_VERSION=%v \
                   BUILDKITE_SCALE_IN_IDLE_PERIOD=${ScaleInIdlePeriod} \
                   BUILDKITE_SECRETS_BUCKET="${LocalSecretsBucket}" \
-                  BUILDKITE_AGENT_TOKEN="${BuildkiteAgentToken}" \
-                  BUILDKITE_AGENT_TOKEN_PATH="${BuildkiteAgentTokenParameterStorePath}" \
+                  BUILDKITE_AGENT_TOKEN_PATH="${AgentTokenPath}" \
                   BUILDKITE_AGENTS_PER_INSTANCE="${AgentsPerInstance}" \
                   BUILDKITE_AGENT_TAGS="${BuildkiteAgentTags}" \
                   BUILDKITE_AGENT_TIMESTAMP_LINES="${BuildkiteAgentTimestampLines}" \
@@ -972,6 +959,7 @@ Resources:
                   --==BOUNDARY==--
                 - {
                     LocalSecretsBucket: !If [ CreateSecretsBucket, !Ref ManagedSecretsBucket, !Ref SecretsBucket ],
+                    AgentTokenPath: !If [ UseCustomerManagedParameterPath, !Ref BuildkiteAgentTokenParameterStorePath, !Ref BuildkiteAgentTokenParameter ],
                   }
 
   AgentAutoScaleGroup:
@@ -1099,117 +1087,19 @@ Resources:
       ToPort: 22
       CidrIp: 0.0.0.0/0
 
-  AutoscalingLambdaExecutionRole:
-    Type: AWS::IAM::Role
+  Autoscaling:
+    Type: AWS::Serverless::Application
     Condition: HasVariableSize
     Properties:
-      PermissionsBoundary: !If [ SetInstanceRolePermissionsBoundaryARN, !Ref InstanceRolePermissionsBoundaryARN, !Ref "AWS::NoValue" ]
-      Path: "/"
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: AutoScalingGroups
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - autoscaling:DescribeAutoScalingGroups
-                  - autoscaling:SetDesiredCapacity
-                Resource: '*'
-        - PolicyName: WriteCloudwatchMetrics
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - cloudwatch:PutMetricData
-                Resource: '*'
-        - !If
-          - UseCustomerManagedKeyForParameterStore
-          - PolicyName: DecryptAgentToken
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - kms:Decrypt
-                  Resource: !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/${BuildkiteAgentTokenParameterStoreKMSKey}
-          - !Ref 'AWS::NoValue'
-        - !If
-          - UseSSMAgentToken
-          - PolicyName: ReadAgentToken
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - ssm:GetParameter
-                  Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BuildkiteAgentTokenParameterStorePath}
-          - !Ref 'AWS::NoValue'
-
-  # This mirrors the group that would be created by the lambda, but enforces
-  # a retention period and also ensures it's removed when the stack is removed
-  AutoscalingLogGroup:
-    Type: "AWS::Logs::LogGroup"
-    Condition: HasVariableSize
-    Properties:
-      LogGroupName: !Join ["/", ["/aws/lambda", !Ref AutoscalingFunction]]
-      RetentionInDays: 1
-
-  AutoscalingFunction:
-    Type: AWS::Lambda::Function
-    Condition: HasVariableSize
-    Properties:
-      Code:
-        S3Bucket: { 'Fn::FindInMap': [LambdaBucket, !Ref 'AWS::Region', 'Bucket'] }
-        S3Key: "buildkite-agent-scaler/v1.1.1/handler.zip"
-      Role: !GetAtt AutoscalingLambdaExecutionRole.Arn
-      Timeout: 120
-      Handler: handler
-      Runtime: go1.x
-      MemorySize: 128
-      Environment:
-        Variables:
-          BUILDKITE_AGENT_TOKEN: !If [ UseSSMAgentToken, !Ref 'AWS::NoValue', !Ref BuildkiteAgentToken ]
-          BUILDKITE_AGENT_TOKEN_SSM_KEY: !Ref BuildkiteAgentTokenParameterStorePath
-          BUILDKITE_QUEUE:       !Ref BuildkiteQueue
-          AGENTS_PER_INSTANCE:   !Ref AgentsPerInstance
-          CLOUDWATCH_METRICS:    "1"
-          DISABLE_SCALE_IN:      "1"
-          ASG_NAME:              !Ref AgentAutoScaleGroup
-          MIN_SIZE:              !Ref MinSize
-          MAX_SIZE:              !Ref MaxSize
-          SCALE_OUT_FACTOR:      !Ref ScaleOutFactor
-          INCLUDE_WAITING:       !Ref ScaleOutForWaitingJobs
-          LAMBDA_TIMEOUT:        "50s"
-          LAMBDA_INTERVAL:       "10s"
-
-  AutoscalingLambdaScheduledRule:
-    Type: "AWS::Events::Rule"
-    Condition: HasVariableSize
-    Properties:
-      Description: "ScheduledRule"
-      ScheduleExpression: "rate(1 minute)"
-      State: ENABLED
-      Targets:
-        - Arn: !GetAtt AutoscalingFunction.Arn
-          Id: "AutoscalingFunction"
-
-  PermissionForEventsToInvokeAutoscalingLambda:
-    Type: "AWS::Lambda::Permission"
-    Condition: HasVariableSize
-    Properties:
-      FunctionName: !Ref AutoscalingFunction
-      Action: "lambda:InvokeFunction"
-      Principal: "events.amazonaws.com"
-      SourceArn: !GetAtt AutoscalingLambdaScheduledRule.Arn
+      Location:
+        ApplicationId: arn:aws:serverlessrepo:us-east-1:172840064832:applications/buildkite-agent-scaler
+        SemanticVersion: '1.1.1'
+      Parameters:
+        BuildkiteAgentTokenParameter: !If [ UseCustomerManagedParameterPath, !Ref BuildkiteAgentTokenParameterStorePath, !Ref BuildkiteAgentTokenParameter ]
+        BuildkiteQueue: !Ref BuildkiteQueue
+        AgentsPerInstance: !Ref AgentsPerInstance
+        MinSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
+        AgentAutoScaleGroup: !Ref AgentAutoScaleGroup
+        ScaleOutFactor: !Ref ScaleOutFactor
+        ScaleOutForWaitingJobs: !Ref ScaleOutForWaitingJobs

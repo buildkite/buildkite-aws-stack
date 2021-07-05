@@ -95,10 +95,7 @@ else
   BUILDKITE_AGENT_GIT_MIRRORS_PATH=""
 fi
 
-# If the agent token path is set, use that instead of BUILDKITE_AGENT_TOKEN
-if [[ -n "${BUILDKITE_AGENT_TOKEN_PATH}" ]] ; then
-    BUILDKITE_AGENT_TOKEN="$(aws ssm get-parameter --name "${BUILDKITE_AGENT_TOKEN_PATH}" --with-decryption --query Parameter.Value --output text)"
-fi
+BUILDKITE_AGENT_TOKEN="$(aws ssm get-parameter --name "${BUILDKITE_AGENT_TOKEN_PATH}" --with-decryption --query Parameter.Value --output text)"
 
 cat << EOF > /etc/buildkite-agent/buildkite-agent.cfg
 name="${BUILDKITE_STACK_NAME}-${INSTANCE_ID}-%spawn"

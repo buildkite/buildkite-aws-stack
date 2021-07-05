@@ -146,7 +146,7 @@ create-stack: build/aws-stack.yml env-STACK_NAME
 		--stack-name $(STACK_NAME) \
 		--disable-rollback \
 		--template-body "file://$(PWD)/build/aws-stack.yml" \
-		--capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+		--capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
 		--parameters "$$(cat config.json)"
 
 update-stack: build/aws-stack.yml env-STACK_NAME
@@ -154,7 +154,7 @@ update-stack: build/aws-stack.yml env-STACK_NAME
 		--output text \
 		--stack-name $(STACK_NAME) \
 		--template-body "file://$(PWD)/build/aws-stack.yml" \
-		--capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+		--capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
 		--parameters "$$(cat config.json)"
 
 
