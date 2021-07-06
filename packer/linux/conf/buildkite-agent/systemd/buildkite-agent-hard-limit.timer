@@ -1,0 +1,10 @@
+[Unit]
+Description=Initiate hard stop of agent
+After=buildkite-agent.service
+
+[Timer]
+# 3hr soft timer + 21hr grace period
+OnBootSec=24hr
+
+[Install]
+WantedBy=timers.target

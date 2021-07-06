@@ -1,0 +1,6 @@
+[Unit]
+Description=Soft stop buildkite agent
+
+[Service]
+ExecStart=/bin/systemctl kill --signal=TERM --kill-who=main buildkite-agent
+RemainAfterExit=true

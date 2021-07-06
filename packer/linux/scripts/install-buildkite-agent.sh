@@ -60,7 +60,8 @@ sudo mkdir -p /var/lib/buildkite-agent/plugins
 sudo chown -R buildkite-agent: /var/lib/buildkite-agent/plugins
 
 echo "Adding systemd service template..."
-sudo cp /tmp/conf/buildkite-agent/systemd/buildkite-agent.service /etc/systemd/system/buildkite-agent.service
+sudo cp /tmp/conf/buildkite-agent/systemd/*.service /etc/systemd/system/
+sudo cp /tmp/conf/buildkite-agent/systemd/*.timer /etc/systemd/system/
 
 echo "Adding cloud-init failure safety check..."
 sudo mkdir -p /etc/systemd/system/cloud-final.service.d/

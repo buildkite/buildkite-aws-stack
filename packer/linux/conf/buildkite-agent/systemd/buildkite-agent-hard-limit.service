@@ -1,0 +1,6 @@
+[Unit]
+Description=Hard stop buildkite agent
+
+[Service]
+ExecStart=/bin/systemctl stop buildkite-agent
+RemainAfterExit=true

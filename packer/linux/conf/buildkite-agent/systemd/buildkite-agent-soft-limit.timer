@@ -1,0 +1,9 @@
+[Unit]
+Description=Initiate soft stop of agent
+After=buildkite-agent.service
+
+[Timer]
+OnBootSec=3hr
+
+[Install]
+WantedBy=timers.target

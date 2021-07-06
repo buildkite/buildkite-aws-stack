@@ -158,8 +158,10 @@ if ! docker ps ; then
   exit 1
 fi
 
-systemctl enable "buildkite-agent"
-systemctl start "buildkite-agent"
+systemctl enable --now "buildkite-agent"
+
+systemctl enable --now "buildkite-agent-soft-limit.timer"
+systemctl enable --now "buildkite-agent-hard-limit.timer"
 
 # let the stack know that this host has been initialized successfully
 /opt/aws/bin/cfn-signal \
