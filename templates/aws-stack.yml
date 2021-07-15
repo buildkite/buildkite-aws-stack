@@ -63,6 +63,10 @@ Metadata:
         - ScaleInIdlePeriod
         - ScaleOutForWaitingJobs
         - InstanceCreationTimeout
+        - StartSchedule
+        - EndSchedule
+        - ScheduleMinSize
+        - ScheduleMaxSize
 
       - Label:
           default: Cost Allocation Configuration
@@ -407,6 +411,28 @@ Parameters:
       - "false"
     Default: "false"
 
+  StartSchedule:
+    Type: String
+    Description: "The recurring schedule for changing agent count, in Unix cron syntax format."
+    Default: ""
+    AllowedPattern: "^$|^(((\\d+,)+\\d+|(\\d+(\\/|-)\\d+)|\\d+|\\*) ?){5,7}$"
+
+  EndSchedule:
+    Type: String
+    Description: "The recurring schedule for resetting the agent count to default, in Unix cron syntax format."
+    Default: ""
+    AllowedPattern: "^$|^(((\\d+,)+\\d+|(\\d+(\\/|-)\\d+)|\\d+|\\*) ?){5,7}$"
+
+  ScheduleMinSize:
+    Type: Number
+    Description: "The the minimum number of agents to have running during the Scheduled period."
+    Default: 0
+
+  ScheduleMaxSize:
+    Type: Number
+    Description: "The the maximum number of agents to have running during the Scheduled period. Defaults to regular max size if not set."
+    Default: -1
+
 Outputs:
   VpcId:
     Value:
@@ -536,6 +562,15 @@ Conditions:
         - !Equals [ !Select [ 0, !Split [ ".", !Ref InstanceType ] ], "c6gn" ]
         - !Equals [ !Select [ 0, !Split [ ".", !Ref InstanceType ] ], "r6g" ]
         - !Equals [ !Select [ 0, !Split [ ".", !Ref InstanceType ] ], "r6gd" ]
+
+    HasStartSchedule:
+      !Not [ !Equals [ !Ref StartSchedule, "" ] ]
+
+    HasEndSchedule:
+      !Not [ !Equals [ !Ref EndSchedule, "" ] ]
+
+    HasScheduleMaxSize:
+      !Not [ !Equals [ !Ref ScheduleMaxSize, -1 ] ]
 
 Mappings:
   ECRManagedPolicy:
@@ -1022,6 +1057,24 @@ Resources:
     UpdatePolicy:
       AutoScalingReplacingUpdate:
         WillReplace: true
+
+  AutoScalingStartSchedule:
+    Type: AWS::AutoScaling::ScheduledAction
+    Condition: HasStartSchedule
+    Properties: 
+      AutoScalingGroupName: !Ref AgentAutoScaleGroup
+      MinSize: !Ref ScheduleMinSize
+      MaxSize: !If [ HasScheduleMaxSize, !Ref ScheduleMaxSize, !Ref MaxSize ]
+      Recurrence: !Ref StartSchedule
+
+  AutoScalingEndSchedule:
+    Type: AWS::AutoScaling::ScheduledAction
+    Condition: HasEndSchedule
+    Properties: 
+      AutoScalingGroupName: !Ref AgentAutoScaleGroup
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize 
+      Recurrence: !Ref EndSchedule
 
   AsgProcessSuspenderRole:
     Type: AWS::IAM::Role
