@@ -1,11 +1,14 @@
 [submodule "plugins/secrets"]
 	path = plugins/secrets
 	url = https://github.com/buildkite/elastic-ci-stack-s3-secrets-hooks.git
+	branch = v2.0.0
 
 [submodule "plugins/ecr"]
 	path = plugins/ecr
 	url = https://github.com/buildkite-plugins/ecr-buildkite-plugin.git
+	branch = v2.3.0
 
 [submodule "plugins/docker-login"]
 	path = plugins/docker-login
 	url = https://github.com/buildkite-plugins/docker-login-buildkite-plugin.git
+	branch = v2.0.1
