@@ -407,6 +407,11 @@ Parameters:
       - "false"
     Default: "false"
 
+  WarmPoolMinSize:
+    Type: Number
+    Description: Minimum number of instances in warm pool
+    Default: 0
+
 Outputs:
   VpcId:
     Value:
@@ -536,6 +541,9 @@ Conditions:
         - !Equals [ !Select [ 0, !Split [ ".", !Ref InstanceType ] ], "c6gn" ]
         - !Equals [ !Select [ 0, !Split [ ".", !Ref InstanceType ] ], "r6g" ]
         - !Equals [ !Select [ 0, !Split [ ".", !Ref InstanceType ] ], "r6gd" ]
+
+    UseWarmPool:
+      !Not [ !Equals [ !Ref WarmPoolMinSize, 0 ] ]
 
 Mappings:
   ECRManagedPolicy:
@@ -1022,6 +1030,14 @@ Resources:
     UpdatePolicy:
       AutoScalingReplacingUpdate:
         WillReplace: true
+
+  AsgWarmPool: 
+    Type: AWS::AutoScaling::WarmPool
+    Condition: UseWarmPool
+    Properties:
+      AutoScalingGroupName: !Ref AgentAutoScaleGroup
+      MinSize: !Ref WarmPoolMinSize
+      PoolState: Stopped
 
   AsgProcessSuspenderRole:
     Type: AWS::IAM::Role
