@@ -46,6 +46,7 @@ Metadata:
         - ArtifactsBucket
         - AuthorizedUsersUrl
         - BootstrapScriptUrl
+        - CancelGracePeriod
         - RootVolumeSize
         - RootVolumeName
         - RootVolumeType
@@ -186,6 +187,12 @@ Parameters:
     Description: Optional - HTTPS or S3 URL to run on each instance during boot
     Type: String
     Default: ""
+
+  CancelGracePeriod:
+    Description: Optional - The number of seconds a canceled or timed out job is given to gracefully terminate and upload its artifacts
+    Type: Number
+    Default: 10
+    MinValue: 1
 
   AuthorizedUsersUrl:
     Description: Optional - HTTPS or S3 URL to periodically download ssh authorized_keys from, setting this will enable SSH ingress. authorized_keys are applied to ec2_user
@@ -933,6 +940,7 @@ Resources:
                   $Env:BUILDKITE_QUEUE="${BuildkiteQueue}"
                   $Env:BUILDKITE_AGENT_ENABLE_GIT_MIRRORS_EXPERIMENT="${EnableAgentGitMirrorsExperiment}"
                   $Env:BUILDKITE_ELASTIC_BOOTSTRAP_SCRIPT="${BootstrapScriptUrl}"
+                  $Env:BUILDKITE_CANCEL_GRACE_PERIOD="${CancelGracePeriod}"
                   $Env:BUILDKITE_AUTHORIZED_USERS_URL="${AuthorizedUsersUrl}"
                   $Env:BUILDKITE_ECR_POLICY="${ECRAccessPolicy}"
                   $Env:BUILDKITE_TERMINATE_INSTANCE_AFTER_JOB="${BuildkiteTerminateInstanceAfterJob}"
@@ -974,6 +982,7 @@ Resources:
                   BUILDKITE_QUEUE="${BuildkiteQueue}" \
                   BUILDKITE_AGENT_ENABLE_GIT_MIRRORS_EXPERIMENT=${EnableAgentGitMirrorsExperiment} \
                   BUILDKITE_ELASTIC_BOOTSTRAP_SCRIPT="${BootstrapScriptUrl}" \
+                  BUILDKITE_CANCEL_GRACE_PERIOD="${CancelGracePeriod}" \
                   BUILDKITE_AUTHORIZED_USERS_URL="${AuthorizedUsersUrl}" \
                   BUILDKITE_ECR_POLICY=${ECRAccessPolicy} \
                   BUILDKITE_TERMINATE_INSTANCE_AFTER_JOB=${BuildkiteTerminateInstanceAfterJob} \
