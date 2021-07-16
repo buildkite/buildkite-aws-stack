@@ -17,3 +17,8 @@ fi
 if [[ "${DOCKER_EXPERIMENTAL:-false}" == "true" ]] ; then
   cat <<< "$(jq '.experimental=true' /etc/docker/daemon.json)" > /etc/docker/daemon.json
 fi
+
+# Move docker root to the ephemeral device
+if [[ "${BUILDKITE_ENABLE_INSTANCE_STORAGE:-false}" == "true" ]] ; then
+  cat <<< "$(jq '.data-root="/ephemeral/docker"' /etc/docker/daemon.json)" > /etc/docker/daemon.json
+fi

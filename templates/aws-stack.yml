@@ -381,6 +381,14 @@ Parameters:
       - "false"
     Default: "false"
 
+  EnableInstanceStorage:
+    Type: String
+    Description: Mount any Instance Storage on the EC2 instance (on /ephemeral)
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
+
   EnableCostAllocationTags:
     Type: String
     Description: Enables AWS Cost Allocation tags for all resources in the stack. See https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/cost-alloc-tags.html
@@ -954,8 +962,13 @@ Resources:
                   MIME-Version: 1.0
                   --==BOUNDARY==
                   Content-Type: text/cloud-boothook; charset="us-ascii"
+                  BUILDKITE_ENABLE_INSTANCE_STORAGE="${EnableInstanceStorage}" \
+                    /usr/local/bin/bk-mount-instance-storage.sh
+                  --==BOUNDARY==
+                  Content-Type: text/cloud-boothook; charset="us-ascii"
                   DOCKER_USERNS_REMAP=${EnableDockerUserNamespaceRemap} \
                   DOCKER_EXPERIMENTAL=${EnableDockerExperimental} \
+                  BUILDKITE_ENABLE_INSTANCE_STORAGE="${EnableInstanceStorage}" \
                     /usr/local/bin/bk-configure-docker.sh
                   --==BOUNDARY==
                   Content-Type: text/x-shellscript; charset="us-ascii"
