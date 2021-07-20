@@ -1,124 +1,131 @@
 #!/bin/bash
 set -eu -o pipefail
 
-# shellcheck source=/dev/null
-source ~/cfn-env
+setup_env() {
+  # shellcheck source=/dev/null
+  source ~/cfn-env
 
-# a clean docker config for each job, for improved isolation
-BUILDKITE_DOCKER_CONFIG_TEMP_DIRECTORY=$(mktemp -d)
-export BUILDKITE_DOCKER_CONFIG_TEMP_DIRECTORY
-export DOCKER_CONFIG="$BUILDKITE_DOCKER_CONFIG_TEMP_DIRECTORY"
+  # a clean docker config for each job, for improved isolation
+  BUILDKITE_DOCKER_CONFIG_TEMP_DIRECTORY=$(mktemp -d)
+  export BUILDKITE_DOCKER_CONFIG_TEMP_DIRECTORY
+  export DOCKER_CONFIG="$BUILDKITE_DOCKER_CONFIG_TEMP_DIRECTORY"
 
-echo "~~~ :llama: Setting up elastic stack environment ($BUILDKITE_STACK_VERSION)"
-cat ~/cfn-env
+  echo "~~~ :llama: Setting up elastic stack environment ($BUILDKITE_STACK_VERSION)"
+  cat ~/cfn-env
 
-echo "Checking docker"
-if ! docker ps ; then
-  echo "^^^ +++"
-  echo ":alert: Docker isn't running!"
-  set -x
-  pgrep -lf docker || tail -n 50 /var/log/docker
-  exit 1
-fi
-
-echo "Checking disk space"
-if ! /usr/local/bin/bk-check-disk-space.sh ; then
-
-  echo "Cleaning up docker resources older than ${DOCKER_PRUNE_UNTIL:-4h}"
-  docker image prune --all --force --filter "until=${DOCKER_PRUNE_UNTIL:-4h}"
-
-  echo "Checking disk space again"
-  if ! /usr/local/bin/bk-check-disk-space.sh ; then
-    echo "Disk health checks failed" >&2
+  echo "Checking docker"
+  if ! docker ps ; then
+    echo "^^^ +++"
+    echo ":alert: Docker isn't running!"
+    set -x
+    pgrep -lf docker || tail -n 50 /var/log/docker
     exit 1
   fi
-fi
 
-echo "Configuring built-in plugins"
+  echo "Checking disk space"
+  if ! /usr/local/bin/bk-check-disk-space.sh ; then
 
-[[ ! ${SECRETS_PLUGIN_ENABLED:-true} =~ (on|1|true) ]] && PLUGINS_ENABLED=${PLUGINS_ENABLED/secrets/}
-[[ ! ${DOCKER_LOGIN_PLUGIN_ENABLED:-true} =~ (on|1|true) ]] && PLUGINS_ENABLED=${PLUGINS_ENABLED/docker-login/}
-[[ ! ${ECR_PLUGIN_ENABLED:-true} =~ (on|1|true) ]] && PLUGINS_ENABLED=${PLUGINS_ENABLED/ecr/}
+    echo "Cleaning up docker resources older than ${DOCKER_PRUNE_UNTIL:-4h}"
+    docker image prune --all --force --filter "until=${DOCKER_PRUNE_UNTIL:-4h}"
 
-SECRETS_PLUGIN_ENABLED=0
-DOCKER_LOGIN_PLUGIN_ENABLED=0
-ECR_PLUGIN_ENABLED=0
-
-for plugin in $PLUGINS_ENABLED ; do
-  case "$plugin" in
-    secrets)
-      export SECRETS_PLUGIN_ENABLED=1
-      echo "Secrets plugin enabled"
-      ;;
-    docker-login)
-      export DOCKER_LOGIN_PLUGIN_ENABLED=1
-      echo "Docker-login plugin enabled"
-      ;;
-    ecr)
-      export ECR_PLUGIN_ENABLED=1
-      echo "ECR plugin enabled"
-      ;;
-  esac
-done
-
-if [[ -n "${BUILDKITE_SECRETS_BUCKET:-}" &&  "${SECRETS_PLUGIN_ENABLED:-}" == "1" ]] ; then
-  export BUILDKITE_PLUGIN_S3_SECRETS_BUCKET="$BUILDKITE_SECRETS_BUCKET"
-
-  # shellcheck source=/dev/null
-  source /usr/local/buildkite-aws-stack/plugins/secrets/hooks/environment
-fi
-
-if [[ "${BUILDKITE_ECR_POLICY:-}" != "none" && "${ECR_PLUGIN_ENABLED:-}" == "1" ]] ; then
-  export BUILDKITE_PLUGIN_ECR_LOGIN=1
-
-  # map AWS_ECR_LOGIN_REGISTRY_IDS into the plugin list format
-  if [[ -n "${AWS_ECR_LOGIN_REGISTRY_IDS:-}" ]] ; then
-    export BUILDKITE_PLUGIN_ECR_ACCOUNT_IDS_0="${AWS_ECR_LOGIN_REGISTRY_IDS}"
+    echo "Checking disk space again"
+    if ! /usr/local/bin/bk-check-disk-space.sh ; then
+      echo "Disk health checks failed" >&2
+      exit 1
+    fi
   fi
 
-  # shellcheck source=/dev/null
-  source /usr/local/buildkite-aws-stack/plugins/ecr/hooks/environment
-fi
+  echo "Configuring built-in plugins"
 
-if [[ "${DOCKER_USERNS_REMAP:-false}" == "false" ]] ; then
-  # We need to scope the next bit to only the currently running agent dir and
-  # pipeline, but we also need to control security and make sure arbitrary folders
-  # can't be chmoded.
-  #
-  # The agent builds path isn't exposed nicely by itself. The agent name also
-  # doesn't quite map to its builds path. We do have a complete checkout path,
-  # but we need to chop it up, safely. The path looks like:
-  #
-  #   BUILDKITE_BUILD_CHECKOUT_PATH="/var/lib/buildkite-agent/builds/my-agent-1/my-org/my-pipeline"
-  #
-  # We know the beginning of this path, it's in BUILDKITE_BUILD_PATH:
-  #
-  #   BUILDKITE_BUILD_PATH="/var/lib/buildkite-agent/builds"
+  [[ ! ${SECRETS_PLUGIN_ENABLED:-true} =~ (on|1|true) ]] && PLUGINS_ENABLED=${PLUGINS_ENABLED/secrets/}
+  [[ ! ${DOCKER_LOGIN_PLUGIN_ENABLED:-true} =~ (on|1|true) ]] && PLUGINS_ENABLED=${PLUGINS_ENABLED/docker-login/}
+  [[ ! ${ECR_PLUGIN_ENABLED:-true} =~ (on|1|true) ]] && PLUGINS_ENABLED=${PLUGINS_ENABLED/ecr/}
 
-  # So we can calculate the suffix as a substring:
-  AGENT_ORG_PIPELINE_DIR="${BUILDKITE_BUILD_CHECKOUT_PATH#${BUILDKITE_BUILD_PATH}/}"
-  # => "my-agent-1/my-org/my-pipeline"
+  SECRETS_PLUGIN_ENABLED=0
+  DOCKER_LOGIN_PLUGIN_ENABLED=0
+  ECR_PLUGIN_ENABLED=0
 
-  # Then we can grab just the first path component, the agent name, by removing
-  # the longest suffix starting with a slash:
-  AGENT_DIR="${AGENT_ORG_PIPELINE_DIR%%/*}"
-  # => "my-agent-1"
+  for plugin in $PLUGINS_ENABLED ; do
+    case "$plugin" in
+      secrets)
+        export SECRETS_PLUGIN_ENABLED=1
+        echo "Secrets plugin enabled"
+        ;;
+      docker-login)
+        export DOCKER_LOGIN_PLUGIN_ENABLED=1
+        echo "Docker-login plugin enabled"
+        ;;
+      ecr)
+        export ECR_PLUGIN_ENABLED=1
+        echo "ECR plugin enabled"
+        ;;
+    esac
+  done
 
-  # Then we can figure out the org/pipeline path component
-  ORG_PIPELINE_DIR="${AGENT_ORG_PIPELINE_DIR#${AGENT_DIR}/}"
-  # => "my-org/my-pipeline"
+  if [[ -n "${BUILDKITE_SECRETS_BUCKET:-}" &&  "${SECRETS_PLUGIN_ENABLED:-}" == "1" ]] ; then
+    export BUILDKITE_PLUGIN_S3_SECRETS_BUCKET="$BUILDKITE_SECRETS_BUCKET"
 
-  # Then we grab just the first path component, the org, by removing the longest
-  # suffix starting with a slash:
-  ORG_DIR="${ORG_PIPELINE_DIR%%/*}"
-  # => "my-org"
+    # shellcheck source=/dev/null
+    source /usr/local/buildkite-aws-stack/plugins/secrets/hooks/environment
+  fi
 
-  # Then we can figure out the pipeline path component using the org dir
-  PIPELINE_DIR="${ORG_PIPELINE_DIR#${ORG_DIR}/}"
-  # => "my-pipeline"
+  if [[ "${BUILDKITE_ECR_POLICY:-}" != "none" && "${ECR_PLUGIN_ENABLED:-}" == "1" ]] ; then
+    export BUILDKITE_PLUGIN_ECR_LOGIN=1
 
-  # Now we can pass this to the sudo script which will validate it before safely chmodding:
-  echo "Fixing permissions for '${AGENT_DIR}/${ORG_DIR}/${PIPELINE_DIR}'..."
-  sudo /usr/bin/fix-buildkite-agent-builds-permissions "${AGENT_DIR}" "${ORG_DIR}" "${PIPELINE_DIR}"
-  echo
-fi
+    # map AWS_ECR_LOGIN_REGISTRY_IDS into the plugin list format
+    if [[ -n "${AWS_ECR_LOGIN_REGISTRY_IDS:-}" ]] ; then
+      export BUILDKITE_PLUGIN_ECR_ACCOUNT_IDS_0="${AWS_ECR_LOGIN_REGISTRY_IDS}"
+    fi
+
+    # shellcheck source=/dev/null
+    source /usr/local/buildkite-aws-stack/plugins/ecr/hooks/environment
+  fi
+
+  if [[ "${DOCKER_USERNS_REMAP:-false}" == "false" ]] ; then
+    # We need to scope the next bit to only the currently running agent dir and
+    # pipeline, but we also need to control security and make sure arbitrary folders
+    # can't be chmoded.
+    #
+    # The agent builds path isn't exposed nicely by itself. The agent name also
+    # doesn't quite map to its builds path. We do have a complete checkout path,
+    # but we need to chop it up, safely. The path looks like:
+    #
+    #   BUILDKITE_BUILD_CHECKOUT_PATH="/var/lib/buildkite-agent/builds/my-agent-1/my-org/my-pipeline"
+    #
+    # We know the beginning of this path, it's in BUILDKITE_BUILD_PATH:
+    #
+    #   BUILDKITE_BUILD_PATH="/var/lib/buildkite-agent/builds"
+
+    # So we can calculate the suffix as a substring:
+    AGENT_ORG_PIPELINE_DIR="${BUILDKITE_BUILD_CHECKOUT_PATH#${BUILDKITE_BUILD_PATH}/}"
+    # => "my-agent-1/my-org/my-pipeline"
+
+    # Then we can grab just the first path component, the agent name, by removing
+    # the longest suffix starting with a slash:
+    AGENT_DIR="${AGENT_ORG_PIPELINE_DIR%%/*}"
+    # => "my-agent-1"
+
+    # Then we can figure out the org/pipeline path component
+    ORG_PIPELINE_DIR="${AGENT_ORG_PIPELINE_DIR#${AGENT_DIR}/}"
+    # => "my-org/my-pipeline"
+
+    # Then we grab just the first path component, the org, by removing the longest
+    # suffix starting with a slash:
+    ORG_DIR="${ORG_PIPELINE_DIR%%/*}"
+    # => "my-org"
+
+    # Then we can figure out the pipeline path component using the org dir
+    PIPELINE_DIR="${ORG_PIPELINE_DIR#${ORG_DIR}/}"
+    # => "my-pipeline"
+
+    # Now we can pass this to the sudo script which will validate it before safely chmodding:
+    echo "Fixing permissions for '${AGENT_DIR}/${ORG_DIR}/${PIPELINE_DIR}'..."
+    sudo /usr/bin/fix-buildkite-agent-builds-permissions "${AGENT_DIR}" "${ORG_DIR}" "${PIPELINE_DIR}"
+    echo
+  fi
+}
+
+setup_env || {
+  echo "Failure setting up elastic stack environment"
+  exit 2
+}
